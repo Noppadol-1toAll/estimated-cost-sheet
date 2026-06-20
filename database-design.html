@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Database Design — Estimated Cost Sheet (Phase 1)</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --navy:#1B3A5F; --rust:#B85A2E; --paper:#F5F2EB; --ink:#1f2430; --line:rgba(27,58,95,.15); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'IBM Plex Sans Thai',sans-serif; background:var(--paper); color:var(--ink); font-size:15px; line-height:1.65; }
+  code, .mono { font-family:'IBM Plex Mono',monospace; font-size:.86em; }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 24px 80px; }
+  header { background:var(--navy); color:#fff; padding:38px 0 30px; margin-bottom:0; }
+  header .wrap { padding-bottom:0; }
+  h1 { font-size:26px; font-weight:700; }
+  .sub { color:rgba(255,255,255,.75); font-size:13.5px; margin-top:6px; }
+  .meta { display:flex; gap:18px; margin-top:14px; font-size:12px; color:rgba(255,255,255,.65); flex-wrap:wrap; }
+  nav { position:sticky; top:0; background:#fff; border-bottom:2px solid var(--navy); z-index:10; }
+  nav .wrap { display:flex; gap:4px; padding:0 24px; overflow-x:auto; }
+  nav button { font-family:inherit; font-size:14px; padding:13px 18px; background:none; border:none; border-bottom:3px solid transparent; cursor:pointer; color:#555; white-space:nowrap; }
+  nav button.on { color:var(--navy); font-weight:600; border-bottom-color:var(--rust); }
+  section { display:none; padding-top:34px; }
+  section.on { display:block; }
+  h2 { font-size:20px; color:var(--navy); margin:26px 0 12px; }
+  h2:first-child { margin-top:0; }
+  h3 { font-size:16px; color:var(--rust); margin:20px 0 8px; }
+  p { margin-bottom:10px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; font-weight:500; position:sticky; top:51px; }
+  td { padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr:hover td { background:#FBF9F4; }
+  .pk { color:var(--rust); font-weight:600; }
+  .fk { color:#1a6e8a; }
+  .tag { display:inline-block; font-size:11px; padding:1px 8px; border-radius:99px; background:var(--paper); border:1px solid var(--line); margin-left:6px; vertical-align:1px; }
+  .ent { background:#fff; border:1px solid var(--line); border-left:4px solid var(--navy); border-radius:8px; padding:14px 16px; }
+  .ent h4 { font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--navy); margin-bottom:2px; }
+  .ent .d { font-size:12.5px; color:#666; margin-bottom:8px; }
+  .ent ul { list-style:none; font-size:12.5px; }
+  .ent li { padding:2.5px 0; border-bottom:1px dashed rgba(0,0,0,.06); font-family:'IBM Plex Mono',monospace; }
+  .ent li:last-child { border:none; }
+  .rows { float:right; font-size:11px; color:var(--rust); font-weight:600; }
+  pre { background:#0E0F11; color:#e8e6e3; border-radius:8px; padding:14px 16px; font-size:12.5px; overflow-x:auto; position:relative; margin:10px 0 16px; line-height:1.55; }
+  pre .cm { color:#7a8290; }
+  pre .hl { color:#FF7A45; }
+  .copy { position:absolute; top:8px; right:8px; font-family:inherit; font-size:11px; padding:4px 10px; background:#2a2d33; color:#bbb; border:1px solid #444; border-radius:5px; cursor:pointer; }
+  .copy:hover { color:#fff; }
+  .step { display:flex; gap:14px; margin-bottom:16px; }
+  .step .n { width:30px; height:30px; flex-shrink:0; border-radius:50%; background:var(--rust); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .note { background:#FFF6E8; border-left:4px solid var(--rust); padding:10px 14px; border-radius:0 8px 8px 0; font-size:13.5px; margin:12px 0; }
+  .ok { color:#1D7A4F; font-weight:600; }
+  .flow { font-family:'IBM Plex Mono',monospace; font-size:13px; background:#fff; border:1px solid var(--line); border-radius:8px; padding:16px 18px; white-space:pre; overflow-x:auto; line-height:1.8; }
+  .br-tbl td:first-child { font-family:'IBM Plex Mono',monospace; white-space:nowrap; }
+  .sev { font-size:11px; padding:1px 8px; border-radius:99px; font-weight:600; }
+  .sev.E { background:#FCE8E8; color:#A32D2D; } .sev.W { background:#FFF3DC; color:#9A6A12; }
+</style>
+</head>
+<body>
+
+<header><div class="wrap">
+  <h1>Database Design — Estimated Cost Sheet</h1>
+  <div class="sub">Phase 1: Master Data บน Supabase (PostgreSQL) · อ้างอิงแนวทาง Product System Blueprint (M02 Item Master / M04 Vendor)</div>
+  <div class="meta">
+    <span>ที่มาข้อมูล: (Rev.2.4.7) Feasibility 1toAll (Draft).xlsx</span>
+    <span>18 ตาราง (master 11 + transaction 7) · 6,328 แถว seed + 14 ผู้ใช้</span>
+    <span>ปรับปรุง: 12/06/2026</span>
+  </div>
+</div></header>
+
+<nav><div class="wrap">
+  <button class="on" data-t="t1">ภาพรวม</button>
+  <button data-t="t2">ตาราง / ERD</button>
+  <button data-t="t3">Business Rules</button>
+  <button data-t="t4">ขั้นตอนติดตั้ง</button>
+  <button data-t="t5">Phase 2 Roadmap</button>
+</div></nav>
+
+<div class="wrap">
+
+<!-- ============ TAB 1: ภาพรวม ============ -->
+<section id="t1" class="on">
+  <h2>เป้าหมาย Phase 1</h2>
+  <div class="card">
+    ย้าย <b>master data ทั้งหมดที่เคย hardcode ใน index.html</b> (item catalog 38 รายการ demo, service type,
+    sale team, overhead, FX rate, รายการมาตรฐาน Install/PMCM, MRC catalog) ไปเก็บใน
+    <b>ฐานข้อมูลกลาง Supabase</b> โดยข้อมูลจริงจากไฟล์ Excel มีถึง <b>6,221 รายการ</b>
+    (active 5,382 · blocked 839) — แอปโหลดผ่าน REST อัตโนมัติ และยังเปิดแบบ offline ได้
+  </div>
+
+  <h2>สถาปัตยกรรมและลำดับแหล่งข้อมูล</h2>
+  <div class="flow">index.html (เปิดจากไฟล์ / โฮสต์ที่ไหนก็ได้)
+   │
+   ├─ 1) Supabase PostgREST  ──  GET /rest/v1/&lt;table&gt;  (anon key, อ่านอย่างเดียว, แบ่งหน้า 1,000 แถว)
+   │        └─ สำเร็จ → ใช้ทันที + เก็บลง cache
+   ├─ 2) localStorage cache  ──  est_master_cache_v1  (เปิดเร็ว / ใช้ตอน offline)
+   └─ 3) ชุด demo ฝังในไฟล์  ──  ~38 รายการ  (กรณียังไม่ตั้งค่า DB และไม่มี cache)</div>
+
+  <h3>ขอบเขต Phase 1 (และที่ตัดออกโดยตั้งใจ)</h3>
+  <div class="card">
+    <b>ทำ:</b> ตาราง master 11 ตาราง · seed จาก Excel · RLS อ่านสาธารณะ/เขียนเฉพาะ service role ·
+    loader ในแอป (item, service_type, sale_team, mrc_catalog, install_pmcm_standard, fx_rate)<br>
+    <b>ยังไม่ทำ (Phase 2):</b> ตาราง transaction (ใบ EST, Quotation, approval log) ·
+    UI widget คงที่ (radio overhead, dropdown) render จาก DB · ระบบ login/สิทธิ์จริง ·
+    ไม่ลากตาราง ERP เต็ม 47 ตารางของ blueprint มาทั้งชุด — ใช้เฉพาะส่วนที่แอปใช้จริง
+  </div>
+
+  <h3>ข้อสมมติฐานที่บันทึกไว้</h3>
+  <div class="card" style="font-size:13.5px;">
+    1. ราคาทุน = 68% ของ MSRP (Excel มีเฉพาะราคาขาย) — สูตรอยู่ฝั่งแอป ปรับได้ที่ <code>applyMasterData()</code><br>
+    2. รายการ <code>blocked = true</code> เก็บใน DB ครบ (ตาม lifecycle ของ blueprint) แต่แอปกรองออกจาก catalog<br>
+    3. MRC catalog ไม่มีใน Excel rev นี้ — seed จากข้อมูลในแอป (ระบุ source ใน schema)<br>
+    4. FX ใน Excel มี 9 ช่วง (ในแอปเดิม hardcode 8) — DB ใช้ตาม Excel เป็นหลัก
+  </div>
+</section>
+
+<!-- ============ TAB 2: ERD ============ -->
+<section id="t2">
+  <h2>ตารางทั้งหมด (11 ตาราง · seed 6,328 แถว)</h2>
+  <p style="font-size:13px;color:#666;"><span class="pk">PK</span> = Primary Key · <span class="fk">FK</span> = Foreign Key · ตัวเลขมุมขวา = จำนวนแถว seed</p>
+  <div class="grid">
+    <div class="ent"><span class="rows">6,221</span><h4>item</h4><div class="d">M02 Item Master — สินค้า/บริการทั้งหมดจาก sheet "Item"</div>
+      <ul><li><span class="pk">item_no</span> varchar(30) PK</li><li>description text · vendor_name</li><li>base_uom · unit_price (MSRP)</li><li>promo_price · promo_start/end</li><li>price_includes_vat · <b>blocked</b></li><li>source_rev · updated_at</li><li class="cm">index: trigram(description), vendor, blocked</li></ul></div>
+    <div class="ent"><span class="rows">17</span><h4>service_type</h4><div class="d">Service + เกณฑ์อนุมัติ (Reference R6-R22)</div>
+      <ul><li><span class="pk">code</span> varchar(60) PK</li><li>category · head_role · head_name</li><li>mkt_rate (→ OPR-100010)</li><li>appv_l1 (Director) · appv_l2 (C-Level)</li><li>approval_group</li></ul></div>
+    <div class="ent"><span class="rows">8</span><h4>sale_team</h4><div class="d">ทีมขาย → routing C-Level</div>
+      <ul><li><span class="pk">name</span> varchar(60) PK</li><li>head_name</li><li>c_level_role (COO/CPO/COS) · c_level_name</li></ul></div>
+    <div class="ent"><span class="rows">8</span><h4>overhead_type</h4><div class="d">ประเภท Overhead (Tab 2)</div>
+      <ul><li><span class="pk">id</span> smallserial PK</li><li>label unique · pct · is_default</li></ul></div>
+    <div class="ent"><span class="rows">9</span><h4>fx_rate</h4><div class="d">อัตราแลกเปลี่ยนตามรอบประกาศฝ่ายการเงิน</div>
+      <ul><li><span class="pk">id</span> smallserial PK</li><li>start_date · end_date · usd · cny</li><li class="cm">check: end_date ≥ start_date</li></ul></div>
+    <div class="ent"><span class="rows">14</span><h4>install_pmcm_standard</h4><div class="d">รายการมาตรฐาน sheet "1) Install"/"2) PMCM"</div>
+      <ul><li><span class="pk">code</span> 'STD-01'..'STD-14' PK</li><li>name · meta · unit_price</li></ul></div>
+    <div class="ent"><span class="rows">20</span><h4>mrc_catalog</h4><div class="d">บริการรายเดือน (ที่มา: แอป)</div>
+      <ul><li><span class="pk">code</span> varchar(30) PK</li><li>vendor · description</li><li>default_cost · default_sale</li></ul></div>
+    <div class="ent"><span class="rows">12</span><h4>staff</h4><div class="d">Sale Person / Pre-Sales (dropdown Tab 1)</div>
+      <ul><li><span class="pk">id</span> smallserial PK</li><li>full_name · nickname</li><li>role check('sale','presale')</li><li><span class="fk">sale_team → sale_team.name</span></li></ul></div>
+    <div class="ent"><span class="rows">5</span><h4>other_expense_type</h4><div class="d">ค่าใช้จ่ายอื่นๆ (Reference col OTHER)</div>
+      <ul><li><span class="pk">id</span> PK · name unique</li></ul></div>
+    <div class="ent"><span class="rows">7</span><h4>project_type</h4><div class="d">New/Move/Add/Change/Decrease/Renew/Transfer</div>
+      <ul><li><span class="pk">name</span> PK · sort</li></ul></div>
+    <div class="ent"><span class="rows">7</span><h4>payment_type</h4><div class="d">Lumpsum/Buffet/Minimum/…</div>
+      <ul><li><span class="pk">name</span> PK · sort</li></ul></div>
+  </div>
+
+  <h3>Transaction Layer — Customer & Quotation (migration #2: <code>db/schema2_customer_quotation.sql</code>)</h3>
+  <p style="font-size:13px;color:#666;">ตาม blueprint M04 (Customer) + M08 (Sales) · RLS <b>deny-by-default</b> — publishable key อ่าน/เขียนไม่ได้ จนกว่าจะมี Auth (Phase 2.4) · ใช้รองรับการเชื่อม CRM</p>
+  <div class="grid">
+    <div class="ent" style="border-left-color:var(--rust);"><h4>customer</h4><div class="d">M04 Customer Master — เจ้าของข้อมูลจริงคือ CRM (sync ผ่าน crm_ref)</div>
+      <ul><li><span class="pk">customer_no</span> 'CUST-YYMM-SEQ4' PK</li><li>name · tax_id (unique เมื่อมีค่า)</li><li>address · contact_name/email/phone</li><li><span class="fk">sale_team → sale_team.name</span></li><li>crm_ref (Account Id ฝั่ง CRM)</li><li>blocked · created_at · updated_at</li></ul></div>
+    <div class="ent" style="border-left-color:var(--rust);"><h4>quotation</h4><div class="d">M08 ใบเสนอราคา (header) — แทน object ใน localStorage</div>
+      <ul><li><span class="pk">quote_no</span> 'QT-YYYYMM-SEQ' PK</li><li>est_no (อ้างใบ EST ต้นทาง)</li><li><span class="fk">customer_no → customer</span></li><li>quote_type check(onetime/recurring/zoom)</li><li>status check(draft/sent/accepted/expired/cancelled)</li><li>quote_date · valid_until (check ≥ quote_date)</li><li>amount_ex_vat · discount · vat_pct · amount_inc_vat</li><li>pay_terms · salesperson · remark · crm_ref</li></ul></div>
+    <div class="ent" style="border-left-color:var(--rust);"><h4>quotation_line</h4><div class="d">บรรทัดรายการในใบเสนอราคา</div>
+      <ul><li><span class="pk">quote_no + line_no</span> PK ผสม</li><li><span class="fk">quote_no → quotation</span> (on delete cascade)</li><li><span class="fk">item_no → item</span> (nullable — บรรทัดอิสระ)</li><li>description · qty · unit_price · line_total</li><li>is_mrc (บรรทัดรายเดือน × term แล้ว)</li><li class="cm">trigger: ห้ามใช้ item ที่ blocked (BR-M08-006)</li></ul></div>
+  </div>
+
+  <h3>Transaction Layer — User & Approval (migration #3: <code>db/schema3_user_approval.sql</code>)</h3>
+  <p style="font-size:13px;color:#666;">รองรับ approval process ตาม role model ในแอป (presale/sale/clevel/ceo) · RLS <b>deny-by-default</b> · ขอบเขต = เก็บ <b>audit trail + สถานะ</b> (การ route ตาม net margin คำนวณในแอป มีอยู่แล้ว) · seed ผู้อนุมัติจริง 14 คน</p>
+  <div class="grid">
+    <div class="ent" style="border-left-color:var(--rust);"><h4>app_user</h4><div class="d">ผู้ใช้ระบบอนุมัติ — standalone ยังไม่ผูก Supabase Auth</div>
+      <ul><li><span class="pk">user_id</span> uuid PK (default gen_random_uuid)</li><li>auth_uid uuid unique (เผื่อ map auth.users ภายหลัง)</li><li>email (unique ตาม lower) · full_name</li><li>role check(presale/sale/clevel/ceo)</li><li>c_level_role check(COO/CPO/COS) — เฉพาะ clevel</li><li><span class="fk">sale_team → sale_team.name</span></li><li>title · active · created_at · updated_at</li><li class="cm">check: (role=clevel) ⇔ มี c_level_role</li></ul></div>
+    <div class="ent" style="border-left-color:var(--rust);"><h4>est_document</h4><div class="d">ใบ Estimated Cost Sheet — สิ่งที่ถูกอนุมัติ แล้วแปลงเป็น quotation</div>
+      <ul><li><span class="pk">est_no</span> 'EST-YYYYMM-SEQ4' PK</li><li><span class="fk">customer_no → customer</span></li><li><span class="fk">service_code → service_type</span> (กำหนด threshold)</li><li><span class="fk">sale_team → sale_team</span> · <span class="fk">created_by → app_user</span></li><li>project_value · net_profit · net_margin_pct (snapshot)</li><li>required_level check(director/clevel/ceo)</li><li>status check(draft/pending/approved/rejected/converted/cancelled)</li><li><span class="fk">quote_no → quotation</span> (set เมื่อแปลง)</li><li>payload jsonb (snapshot ฟอร์มทั้งใบ)</li><li class="cm">trigger: touch updated_at</li></ul></div>
+    <div class="ent" style="border-left-color:var(--rust);"><h4>approval_request</h4><div class="d">คำขออนุมัติ 1 รายการต่อการส่ง 1 ครั้ง</div>
+      <ul><li><span class="pk">request_id</span> bigserial PK</li><li><span class="fk">est_no → est_document</span> (on delete cascade)</li><li><span class="fk">requested_by → app_user</span></li><li>net_margin_pct · required_level (snapshot)</li><li>current_step · total_steps</li><li>status check(pending/approved/rejected/cancelled)</li><li>opened_at · closed_at</li><li class="cm">unique partial: 1 คำขอ pending ต่อ est_no</li></ul></div>
+    <div class="ent" style="border-left-color:var(--rust);"><h4>approval_log</h4><div class="d">audit trail แต่ละก้าวในสายอนุมัติ</div>
+      <ul><li><span class="pk">log_id</span> bigserial PK</li><li><span class="fk">request_id → approval_request</span> (on delete cascade)</li><li>step_no · step_role check(presale/sale/clevel/ceo)</li><li><span class="fk">actor_user → app_user</span> · actor_name (snapshot)</li><li>action check(submitted/approved/rejected/returned/commented)</li><li>comment · acted_at</li></ul></div>
+  </div>
+
+  <h3>การ map สู่ตัวแปรในแอป (applyMasterData)</h3>
+  <table>
+    <thead><tr><th>ตาราง DB</th><th>ตัวแปรใน index.html</th><th>ใช้ที่</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">item</td><td class="mono">itemCatalog[]</td><td>ค้นหา Item Catalog (Tab 3) — กรอง blocked ออก, defaultCost = 68% MSRP</td></tr>
+      <tr><td class="mono">service_type</td><td class="mono">serviceData{}</td><td>เกณฑ์อนุมัติ (Tab 7/8) + Marketing % (OPR-100010)</td></tr>
+      <tr><td class="mono">sale_team</td><td class="mono">saleTeams{}</td><td>Head of Sales / C-Level hint (Tab 1)</td></tr>
+      <tr><td class="mono">mrc_catalog</td><td class="mono">mrcCatalog[]</td><td>ค้นหา Monthly service (Tab 5)</td></tr>
+      <tr><td class="mono">install_pmcm_standard</td><td class="mono">installPmcmCatalog[]</td><td>ค้นหารายการมาตรฐาน (Tab 6)</td></tr>
+      <tr><td class="mono">fx_rate</td><td class="mono">fxRows[]</td><td>FX History + ปุ่ม Exchange Rate (Tab 1)</td></tr>
+      <tr><td class="mono" style="color:#999;">overhead_type, staff, project_type, payment_type, other_expense_type</td><td style="color:#999;">— (Phase 2)</td><td style="color:#999;">รอ render UI จาก DB</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ TAB 3: Business Rules ============ -->
+<section id="t3">
+  <h2>Business Rules</h2>
+  <table class="br-tbl">
+    <thead><tr><th style="width:120px;">Rule</th><th>คำอธิบาย</th><th style="width:90px;">Severity</th></tr></thead>
+    <tbody>
+      <tr><td>BR-ITM-001</td><td><code>item.blocked = true</code> ห้ามปรากฏใน catalog ของแอป (กรองที่ loader) — ตรงกับ lifecycle Discontinued ของ blueprint</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-ITM-002</td><td><code>item_no</code> ห้ามซ้ำ (PK) — generator ตรวจ dup ก่อน insert (rev 2.4.7: dup = 0)</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-SEC-001</td><td>RLS เปิดทุกตาราง: anon key = SELECT เท่านั้น · INSERT/UPDATE/DELETE ทำได้เฉพาะ service role (dashboard / pipeline นำเข้า)</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-FX-001</td><td><code>fx_rate.end_date ≥ start_date</code> (DB check constraint) · แอปเลือกแถว current จากวันที่ปัจจุบัน</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-SVC-001</td><td><code>appv_l1 ≥ appv_l2</code> (Director threshold ≥ C-Level) — ยกเว้น SI Connectivity (AM) ที่ l1 = 1.00 ตาม Reference</td><td><span class="sev W">Warning</span></td></tr>
+      <tr><td>BR-APP-001</td><td>แอปต้องเปิดใช้งานได้แม้ DB ล่ม/offline — cache ล่าสุดใน localStorage, fallback สุดท้ายคือชุด demo ฝังในไฟล์</td><td><span class="sev W">Warning</span></td></tr>
+      <tr><td>BR-MIG-001</td><td>การอัปเดต master ทำผ่าน <code>generate_seed.py</code> + seed.sql เท่านั้น (truncate + reload ทั้งชุด) — ห้ามแก้รายแถวปนกับ pipeline เพื่อให้ตรวจสอบกลับ Excel rev ได้</td><td><span class="sev W">Warning</span></td></tr>
+      <tr><td>BR-QT-001</td><td><code>quotation_line.item_no</code> ที่ <code>blocked = true</code> ถูกปฏิเสธที่ DB ด้วย trigger (ตาม BR-M08-006 ของ blueprint)</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-QT-002</td><td>ลูกค้า <code>blocked = true</code> สร้างใบเสนอราคาใหม่ไม่ได้ (trigger ที่ insert)</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-QT-003</td><td><code>valid_until ≥ quote_date</code> · <code>discount ≥ 0</code> · status/quote_type จำกัดด้วย check constraint</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-QT-004</td><td>ตาราง customer/quotation/quotation_line = RLS deny-by-default — publishable key เข้าถึงไม่ได้ เข้าผ่าน service role (server side) เท่านั้น จนกว่าจะมี Auth</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-APV-001</td><td><code>app_user.role</code> จำกัด presale/sale/clevel/ceo ตรงกับ ADMIN_ROLES ในแอป · บังคับ <code>(role=clevel) ⇔ c_level_role not null</code></td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-APV-002</td><td>1 <code>est_document</code> มี <code>approval_request</code> ที่ <code>status=pending</code> ได้ไม่เกิน 1 (partial unique index) — กันส่งอนุมัติซ้ำซ้อน</td><td><span class="sev E">Error</span></td></tr>
+      <tr><td>BR-APV-003</td><td><code>est_document.net_margin_pct</code>/<code>required_level</code> เป็น <b>snapshot</b> ที่แอปคำนวณตอนส่ง — DB เก็บเพื่อ audit ไม่ re-route เอง (audit-trail-only)</td><td><span class="sev W">Warning</span></td></tr>
+      <tr><td>BR-APV-004</td><td>ตาราง app_user/est_document/approval_request/approval_log = RLS deny-by-default เช่นเดียวกับ migration #2</td><td><span class="sev E">Error</span></td></tr>
+    </tbody>
+  </table>
+  <div class="note">migration #3 เพิ่ม approval workflow แบบ <b>audit-trail-only</b> — กฎ immutable ledger (BR-M05) เต็มรูปแบบ
+  และ RLS ราย role จะบังคับใช้เมื่อเปิด Supabase Auth (Phase 2.4) ผ่าน <code>app_user.auth_uid = auth.uid()</code></div>
+</section>
+
+<!-- ============ TAB 4: ขั้นตอนติดตั้ง ============ -->
+<section id="t4">
+  <h2>ติดตั้งใน 4 ขั้นตอน (~10 นาที)</h2>
+
+  <div class="step"><div class="n">1</div><div style="flex:1;">
+    <b>สร้างโปรเจกต์ Supabase</b><br>
+    ไปที่ <code>supabase.com</code> → New project (Free tier พอสำหรับข้อมูลชุดนี้) → จด <b>Project URL</b> และ <b>anon public key</b> จากเมนู Project Settings → API
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div style="flex:1;">
+    <b>สร้าง schema</b> — เปิด SQL Editor ใน Supabase แล้ววางเนื้อหาไฟล์ <code>db/schema.sql</code> ทั้งไฟล์ → Run
+    <pre><span class="cm">-- ผลที่ต้องได้: 11 ตาราง + extension pg_trgm + RLS "anon read" ทุกตาราง</span>
+<span class="hl">select count(*) from information_schema.tables where table_schema='public';</span>  <span class="cm">-- = 11</span><button class="copy" onclick="cp(this)">คัดลอก</button></pre>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div style="flex:1;">
+    <b>นำเข้าข้อมูล</b> — วางเนื้อหา <code>db/seed.sql</code> (~0.9 MB) ใน SQL Editor → Run
+    (ถ้า editor ช้า ให้ใช้ psql: <code>psql "&lt;connection string&gt;" -f db/seed.sql</code>)
+    <pre><span class="cm">-- ตรวจรับ:</span>
+<span class="hl">select count(*) from item;</span>                       <span class="cm">-- 6221</span>
+<span class="hl">select count(*) from item where blocked=false;</span>   <span class="cm">-- 5382</span>
+<span class="hl">select count(*) from fx_rate;</span>                    <span class="cm">-- 9</span>
+<span class="hl">select count(*) from service_type;</span>               <span class="cm">-- 17</span><button class="copy" onclick="cp(this)">คัดลอก</button></pre>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div style="flex:1;">
+    <b>เชื่อมแอป</b> — เปิด <code>index.html</code> ค้นหา <code>DB_CONFIG</code> แล้วกรอก 2 ค่า:
+    <pre>const DB_CONFIG = {
+  url: <span class="hl">'https://xxxx.supabase.co'</span>,
+  anonKey: <span class="hl">'eyJhbGciOiJI...'</span>
+};<button class="copy" onclick="cp(this)">คัดลอก</button></pre>
+    เปิดแอป → Console ต้องเห็น <span class="ok">[master] loaded from Supabase: 5382 items</span>
+    แล้วลองค้นหา item ใน Tab 3 ด้วยชื่อที่ไม่อยู่ในชุด demo
+  </div></div>
+
+  <h3>Migration #2 — Customer & Quotation (สำหรับเชื่อม CRM)</h3>
+  <pre><span class="cm">-- วางเนื้อหา db/schema2_customer_quotation.sql ใน SQL Editor → Run แล้วตรวจ:</span>
+<span class="hl">select count(*) from information_schema.tables where table_schema='public';</span>  <span class="cm">-- = 14</span>
+<span class="hl">insert into customer (customer_no, name) values ('CUST-TEST-0001','ทดสอบ');</span>     <span class="cm">-- ผ่าน (รันใน SQL Editor = service role)</span>
+<span class="hl">delete from customer where customer_no = 'CUST-TEST-0001';</span><button class="copy" onclick="cp(this)">คัดลอก</button></pre>
+
+  <h3>Migration #3 — User & Approval (รองรับ approval process)</h3>
+  <pre><span class="cm">-- รันหลัง schema2 · วางเนื้อหา db/schema3_user_approval.sql ใน SQL Editor → Run แล้วตรวจ:</span>
+<span class="hl">select count(*) from information_schema.tables where table_schema='public';</span>  <span class="cm">-- = 18</span>
+<span class="hl">select role, count(*) from app_user group by role;</span>  <span class="cm">-- ceo 1 · clevel 3 · sale 6 · presale 4</span><button class="copy" onclick="cp(this)">คัดลอก</button></pre>
+
+  <h3>การอัปเดตข้อมูลเมื่อมี Excel rev ใหม่</h3>
+  <pre>python3 db/generate_seed.py <span class="hl">"(Rev.X.Y.Z) Feasibility 1toAll.xlsx"</span> &gt; db/seed.sql
+<span class="cm"># แล้ว Run seed.sql ใหม่ใน SQL Editor (สคริปต์ truncate + reload ให้เอง)</span><button class="copy" onclick="cp(this)">คัดลอก</button></pre>
+</section>
+
+<!-- ============ TAB 5: Phase 2 ============ -->
+<section id="t5">
+  <h2>Phase 2 Roadmap (เสนอ)</h2>
+  <table>
+    <thead><tr><th style="width:60px;">ลำดับ</th><th>งาน</th><th>ตาราง/ส่วนที่เกี่ยว</th></tr></thead>
+    <tbody>
+      <tr><td>2.1</td><td>ตาราง EST — <b style="color:#1D7A4F;">✓ est_document สร้างแล้ว</b> (migration #3, เก็บ payload jsonb ทั้งใบ) เหลือ write path + แตกบรรทัดเป็นตารางย่อย</td><td class="mono">est_document ✓, est_investment_line, est_mrc_line, est_install_line</td></tr>
+      <tr><td>2.2</td><td>Quotation + ลูกค้า — <b style="color:#1D7A4F;">✓ โครงสร้างสร้างแล้ว</b> (migration #2) เหลือ write path จากแอป + เลขรันเอกสาร</td><td class="mono">customer, quotation, quotation_line, doc_sequence</td></tr>
+      <tr><td>2.3</td><td>Approval pipeline — <b style="color:#1D7A4F;">✓ โครงสร้าง audit-trail สร้างแล้ว</b> (migration #3) เหลือ write path จากแอป + บังคับ immutable (no UPDATE/DELETE บน approval_log) ตาม BR-M05</td><td class="mono">app_user ✓, approval_request ✓, approval_log ✓</td></tr>
+      <tr><td>2.4</td><td>Supabase Auth + role mapping (presale/sale/clevel/ceo) แทน dropdown สิทธิ์ — map ผ่าน <code>app_user.auth_uid</code> + RLS policy ราย role</td><td class="mono">auth.users → app_user.auth_uid + RLS</td></tr>
+      <tr><td>2.5</td><td>UI render จาก DB: radio overhead, dropdown service/project/payment/staff</td><td class="mono">overhead_type, staff, project_type, payment_type</td></tr>
+      <tr><td>2.6</td><td>ใช้ fx_rate คำนวณราคาทุนสกุล USD/CNY (เพิ่มคอลัมน์ currency ใน item)</td><td class="mono">item.currency, fx_rate</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+<script>
+  document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('section').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    document.getElementById(b.dataset.t).classList.add('on');
+    window.scrollTo({ top: 0 });
+  }));
+  function cp(btn) {
+    const pre = btn.parentElement.cloneNode(true);
+    pre.querySelector('.copy').remove();
+    navigator.clipboard.writeText(pre.textContent.trim());
+    btn.textContent = '✓ คัดลอกแล้ว';
+    setTimeout(() => btn.textContent = 'คัดลอก', 1500);
+  }
+</script>
+</body>
+</html>

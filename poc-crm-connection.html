@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<!--
+  Phase 1 PoC — CRM Sale Compass connectivity + auth + read organizations
+  ดู db/INTEGRATION_EXECUTION_PLAN.md (Phase 1) · ไฟล์นี้แยกจาก index.html โดยตั้งใจ
+  Acceptance: login แล้ว select organizations คืนแถวได้ (ก่อน login = 0 แถวเพราะ RLS authenticated-only)
+  ต้องมี test user จาก Phase 0.2 (signup ปิด autoconfirm — สมัครเองทดสอบทันทีไม่ได้)
+-->
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PoC — CRM Sale Compass Connection</title>
+<style>
+  :root{
+    --primary:#2563eb; --border:#e2e8f0; --bg:#f8fafc; --card:#fff;
+    --text:#0f172a; --muted:#64748b; --ok:#16a34a; --err:#dc2626; --warn:#d97706;
+  }
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.5;padding:24px}
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px} .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+  .card h2{font-size:14px;margin:0 0 12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  label{font-size:13px;color:var(--muted);min-width:84px}
+  input{padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:14px;flex:1;min-width:200px}
+  button{padding:8px 14px;border:1px solid var(--primary);background:var(--primary);color:#fff;
+    border-radius:7px;font-size:14px;cursor:pointer;font-weight:500}
+  button.ghost{background:#fff;color:var(--primary)} button:disabled{opacity:.5;cursor:not-allowed}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:999px;
+    background:#f1f5f9;color:var(--muted);font-weight:500}
+  .pill.ok{background:#dcfce7;color:var(--ok)} .pill.err{background:#fee2e2;color:var(--err)}
+  .pill.warn{background:#fef3c7;color:var(--warn)}
+  .kv{display:grid;grid-template-columns:140px 1fr;gap:4px 12px;font-size:13px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  code{background:#f1f5f9;padding:1px 6px;border-radius:5px;font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+  .msg{font-size:13px;padding:9px 12px;border-radius:7px;margin-top:10px;display:none}
+  .msg.show{display:block} .msg.ok{background:#dcfce7;color:#166534} .msg.err{background:#fee2e2;color:#991b1b}
+  .msg.warn{background:#fef3c7;color:#92400e}
+  .muted{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PoC — CRM Sale Compass Connection</h1>
+  <div class="sub">Phase 1: supabase-js + Auth + อ่าน <code>organizations</code> · ไม่แตะ index.html</div>
+
+  <!-- 1. Connection -->
+  <div class="card">
+    <h2>1 · Connection</h2>
+    <div class="kv">
+      <div>supabase-js</div><div id="libStatus"><span class="pill">loading…</span></div>
+      <div>Project URL</div><div><code id="cfgUrl"></code></div>
+      <div>Project ref</div><div><code>lzuxhvpdruaiacfhaqqh</code> (Lovable: compass-golden-path)</div>
+      <div>anon key</div><div><code id="cfgKey"></code></div>
+      <div>Session</div><div id="sessStatus"><span class="pill">checking…</span></div>
+    </div>
+  </div>
+
+  <!-- 2. RLS proof -->
+  <div class="card">
+    <h2>2 · RLS gate (anon ควรเห็น 0 แถว)</h2>
+    <div class="row">
+      <button class="ghost" id="btnAnonTest">ทดสอบอ่าน organizations แบบไม่ login</button>
+      <span id="anonResult" class="muted"></span>
+    </div>
+    <div class="muted" style="margin-top:8px">คาดหวัง: <code>200</code> + <code>0 แถว</code> (RLS เปิดเฉพาะ role authenticated) = พิสูจน์ว่าไม่มีข้อมูลรั่วผ่าน anon</div>
+  </div>
+
+  <!-- 3. Login -->
+  <div class="card">
+    <h2>3 · Login (Supabase Auth)</h2>
+    <div class="row" style="margin-bottom:8px">
+      <label for="email">Email</label>
+      <input id="email" type="email" placeholder="test user จาก Phase 0.2" autocomplete="username" />
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <label for="pwd">Password</label>
+      <input id="pwd" type="password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <div class="row">
+      <button id="btnLogin">เข้าสู่ระบบ</button>
+      <button class="ghost" id="btnLogout" disabled>ออกจากระบบ</button>
+    </div>
+    <div id="authMsg" class="msg"></div>
+  </div>
+
+  <!-- 4. Authenticated reads -->
+  <div class="card">
+    <h2>4 · Acceptance: อ่านข้อมูลหลัง login</h2>
+    <div class="row">
+      <button id="btnLoad" disabled>โหลด profile + organizations</button>
+      <span id="loadHint" class="muted">ต้อง login ก่อน</span>
+    </div>
+    <div id="profileBox" style="margin-top:12px"></div>
+    <div id="orgBox" style="margin-top:8px"></div>
+    <div id="dataMsg" class="msg"></div>
+  </div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  // ── config (anon key ปลอดภัยฝั่ง client เพราะ RLS เป็นด่านจริง) ──
+  const SUPABASE_URL = 'https://lzuxhvpdruaiacfhaqqh.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6dXhodnBkcnVhaWFjZmhhcXFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5MTU4MjMsImV4cCI6MjA5MjQ5MTgyM30.f2eQ3u8amWUL6FlTQQS8hdZstBS6076PzkGlw8aLLYs';
+
+  const $ = (id) => document.getElementById(id);
+  const pill = (txt, cls='') => `<span class="pill ${cls}">${txt}</span>`;
+  const showMsg = (el, txt, cls) => { el.className = `msg show ${cls}`; el.textContent = txt; };
+  const esc = (s) => String(s ?? '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+  // supabase-js โหลดสำเร็จ (มาถึงบรรทัดนี้ = import ผ่าน)
+  $('libStatus').innerHTML = pill('loaded ✓', 'ok');
+  $('cfgUrl').textContent = SUPABASE_URL;
+  $('cfgKey').textContent = SUPABASE_ANON_KEY.slice(0, 24) + '…' + SUPABASE_ANON_KEY.slice(-6);
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storage: localStorage, persistSession: true, autoRefreshToken: true }
+  });
+  window.supabase = supabase; // เผื่อ debug ใน console
+
+  // ── session state ──
+  async function refreshSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const authed = !!session;
+    $('sessStatus').innerHTML = authed
+      ? pill('signed in: ' + esc(session.user.email), 'ok')
+      : pill('not signed in', 'warn');
+    $('btnLogout').disabled = !authed;
+    $('btnLoad').disabled = !authed;
+    $('loadHint').textContent = authed ? '' : 'ต้อง login ก่อน';
+    return session;
+  }
+
+  supabase.auth.onAuthStateChange(() => { refreshSession(); });
+  refreshSession();
+
+  // ── 2 · anon RLS test ──
+  $('btnAnonTest').onclick = async () => {
+    $('anonResult').textContent = 'กำลังทดสอบ…';
+    // client แยกที่ไม่มี session (signOut scope local ก่อน) — ใช้ fetch ตรงเพื่อความชัด
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/organizations?select=id,name&limit=2`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+      });
+      const rows = await res.json();
+      const n = Array.isArray(rows) ? rows.length : '?';
+      $('anonResult').innerHTML = `HTTP ${res.status} · ${n} แถว ` +
+        (n === 0 ? pill('RLS OK ✓', 'ok') : pill('ไม่คาดคิด!', 'err'));
+    } catch (e) {
+      $('anonResult').innerHTML = pill('error: ' + esc(e.message), 'err');
+    }
+  };
+
+  // ── 3 · login / logout ──
+  $('btnLogin').onclick = async () => {
+    const email = $('email').value.trim(), password = $('pwd').value;
+    if (!email || !password) { showMsg($('authMsg'), 'กรอก email + password', 'warn'); return; }
+    $('btnLogin').disabled = true; showMsg($('authMsg'), 'กำลังเข้าสู่ระบบ…', 'warn');
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    $('btnLogin').disabled = false;
+    if (error) { showMsg($('authMsg'), '❌ ' + error.message, 'err'); return; }
+    showMsg($('authMsg'), '✅ เข้าสู่ระบบแล้ว: ' + data.user.email, 'ok');
+    $('pwd').value = '';
+  };
+
+  $('btnLogout').onclick = async () => {
+    await supabase.auth.signOut();
+    showMsg($('authMsg'), 'ออกจากระบบแล้ว', 'warn');
+    $('profileBox').innerHTML = ''; $('orgBox').innerHTML = '';
+    $('dataMsg').className = 'msg';
+  };
+
+  // ── 4 · authenticated reads (Phase 1 acceptance) ──
+  $('btnLoad').onclick = async () => {
+    $('btnLoad').disabled = true; $('dataMsg').className = 'msg';
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { showMsg($('dataMsg'), 'ยังไม่ได้ login', 'err'); $('btnLoad').disabled = false; return; }
+
+    // own profile
+    const { data: prof, error: pErr } = await supabase
+      .from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+    $('profileBox').innerHTML = pErr
+      ? `<div class="muted">profiles: ${esc(pErr.message)}</div>`
+      : prof
+        ? `<div class="kv"><div>profile.id</div><div><code>${esc(prof.id)}</code></div>` +
+          Object.entries(prof).filter(([k])=>['full_name','role','email','department','team_id'].includes(k))
+            .map(([k,v])=>`<div>${k}</div><div>${esc(v)}</div>`).join('') + `</div>`
+        : `<div class="muted">ไม่มีแถวใน profiles สำหรับ user นี้ (ต้อง provision — Phase 0.2)</div>`;
+
+    // organizations (acceptance)
+    const { data: orgs, error: oErr, count } = await supabase
+      .from('organizations').select('id,name,customer_code,tax_id', { count: 'exact' })
+      .order('name').limit(20);
+    if (oErr) { showMsg($('dataMsg'), '❌ organizations: ' + oErr.message, 'err'); $('btnLoad').disabled = false; return; }
+
+    const rows = orgs || [];
+    $('orgBox').innerHTML =
+      `<div class="row" style="margin:6px 0"><strong>organizations</strong> ${pill('total: ' + (count ?? '?'), 'ok')} <span class="muted">(แสดง ${rows.length})</span></div>` +
+      (rows.length
+        ? `<table><thead><tr><th>name</th><th>customer_code</th><th>tax_id</th></tr></thead><tbody>` +
+          rows.map(o=>`<tr><td>${esc(o.name)}</td><td>${esc(o.customer_code)}</td><td>${esc(o.tax_id)}</td></tr>`).join('') +
+          `</tbody></table>`
+        : `<div class="muted">0 แถว — user นี้อาจไม่มีสิทธิ์เห็น org (ตรวจ policy/role)</div>`);
+
+    showMsg($('dataMsg'),
+      rows.length ? `✅ Acceptance ผ่าน: อ่าน organizations ได้ ${count} แถว` : '⚠️ login ได้แต่เห็น 0 แถว — เช็ค RLS/role',
+      rows.length ? 'ok' : 'warn');
+    $('btnLoad').disabled = false;
+  };
+</script>
+</body>
+</html>

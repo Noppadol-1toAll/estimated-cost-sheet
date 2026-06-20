@@ -1,0 +1,29 @@
+# AI Rules for Estimated Cost Sheet 2
+
+You are an AI assisting with the "Estimated Cost Sheet 2" project. Please adhere strictly to the following guidelines when generating code or suggesting modifications.
+
+## 1. Core Architecture & Files
+- **Single File:** The entire application currently lives in `estimated_cost_sheet.html`. Do not attempt to split it into multiple files unless explicitly instructed by the user.
+- **Vanilla Stack:** This project uses Vanilla HTML, plain CSS, and Vanilla JavaScript.
+- **NO Frameworks:** Do NOT use TailwindCSS, Bootstrap, React, Vue, or any other framework/library unless explicitly requested.
+
+## 2. UI & Styling Guidelines (Standard Theme V2)
+- **Theme Variables:** Always use the predefined CSS variables for colors and borders (e.g., `var(--primary)`, `var(--success-light)`, `var(--bg-secondary)`, `var(--border)`).
+- **Layout:**
+  - Use `display: grid` for table rows. Existing classes include `.data-row` and `.opr-row`.
+  - When editing column widths, adjust `grid-template-columns` in the CSS section.
+- **KPI Placement:** Every tab MUST have a `.kpi-grid` element placed at the **absolute top** of the `.tab-content` container, above any banners, buttons, or tables.
+- **Form Inputs:** Ensure inputs inside data rows are seamless. Do not add heavy default borders to `.form-input` within tables; use the transparent border/hover states defined in Standard Theme V2.
+
+## 3. JavaScript Logic & State Management
+- **Inter-Tab Dependency:** Data in this application is highly interconnected. For example, Tab 4 (Operation) dynamically pulls data from Tab 6 (Install/PMCM) and Tab 3 (Investment). 
+  - **CRITICAL:** Do NOT alter, remove, or rename HTML `id` attributes on inputs and elements, as JavaScript relies heavily on them for these calculations.
+- **Auto-Save Mechanism:**
+  - Whenever a user input changes or a row is added/deleted, you MUST ensure `markDirty()` is called.
+  - The UI logic for the Save button is handled internally; do not override the `doSave()` logic unless instructed.
+- **Row Generation:** If you add a new table type, ensure there is a corresponding `addEmptyRow()` function that correctly constructs the HTML string for that specific grid layout.
+
+## 4. Code Modification Practices
+- Use exact string replacements or AST tools precisely.
+- Do not remove existing comments that explain the linkage between tabs or formulas.
+- Maintain the current level of indentation and formatting (typically 2 spaces for HTML/JS).
