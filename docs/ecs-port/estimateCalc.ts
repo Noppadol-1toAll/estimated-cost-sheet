@@ -1,36 +1,10 @@
 // Pure calculation helpers for the Estimate Cost form.
 // Mirrors the Thai feasibility workbook (Rev.2.4.7).
 //
-// STAGED PATCH (2026-06-21) — Tier-1 calc parity fixes. Target: compass-golden-path src/lib/estimateCalc.ts
-// Changes vs current app (see docs/ECS-CALC-PARITY.md):
-//   D1 Bonds  : bank-guarantee FEE = projectValue(inclVAT) × 5% × 1% × periods   (was 5% × revenue)
-//   D2 Mktg   : marketing = header.marketing_rate (per service) × revenue          (was fixed 1%)
-//   D3 Interest: capexCost × 1% × max(0, impl_duration_months − creditMonths)      (was cost × 1% × creditMonths)
-//   D4 Overhead: 8 tiers + optional header.overhead_rate (from presale_db_overhead) (was 4 hardcoded)
-//   D5 NPV    : discount = header.discount_rate_annual (default 0.06)               (was hardcoded 0.05)
-//   D7 VAT    : projectValue incl VAT = revenue × 1.07 (used by bonds)
-// Tier-2 (NOT in this patch): discounted-CF margin/payback from a monthly cash-flow model (CF rows).
+// Tier-1 (OPR formulas) + Tier-2 (discounted monthly cash-flow margin/payback) — see docs/ECS-CALC-PARITY.md.
+// Target: compass-pilot-web (EstiMate Compass) src/lib/estimateCalc.ts
 
 export type LineType = "otc" | "mrc" | "opex" | "install" | "pmcm";
-
-export const INSTALL_PM_TEMPLATE: Array<{ pic: string; item: string; unit_price: number; remark?: string }> = [
-  { pic: "CP11", item: "Professional Service", unit_price: 2000, remark: "PM Service / Design / Config / Service" },
-  { pic: "1-TO-ALL", item: "Car", unit_price: 500 },
-  { pic: "1-TO-ALL", item: "Hotel", unit_price: 2000 },
-  { pic: "1-TO-ALL", item: "Flight (Back-Forth)", unit_price: 0 },
-  { pic: "1-TO-ALL", item: "Manday/perday", unit_price: 2000, remark: "Config / Install ZP by 1-TO-ALL" },
-  { pic: "1-TO-ALL", item: "Manday/perday Project Co (AE)", unit_price: 1000, remark: "Config / Install ZP by 1-TO-ALL" },
-  { pic: "1-TO-ALL", item: "Manday/perday PM", unit_price: 2500, remark: "Config / Install ZP by 1-TO-ALL" },
-  { pic: "1-TO-ALL", item: "Manday/perday ENG", unit_price: 1500, remark: "Config / Install ZP by 1-TO-ALL" },
-  { pic: "1-TO-ALL", item: "Installation & Configuration: Desk Phone/ATA", unit_price: 20 },
-  { pic: "1-TO-ALL", item: "Training Manday", unit_price: 10000, remark: "Installation & training" },
-  { pic: "1-TO-ALL", item: "Numbering Installation", unit_price: 1000 },
-  { pic: "1-TO-ALL/SUB", item: "Professional Service", unit_price: 2000, remark: "Data networking and others" },
-  { pic: "1-TO-ALL/SUB", item: "Car & Installation & Configuration", unit_price: 2000, remark: "Data networking and others" },
-  { pic: "Ribbon", item: "Installation SBC / E1 / ATA", unit_price: 30000, remark: "Installation SBC / E1 / ATA" },
-  { pic: "1-TO-ALL/SUB", item: "Others", unit_price: 0, remark: "ปรับประมาณการณ์ตามเหมาะสม" },
-];
-
 export type Currency = "THB" | "USD" | "CNY";
 
 export type EstimateLine = {
@@ -57,36 +31,24 @@ export type EstimateLine = {
   opex_code?: string | null;
 };
 
-// D4: overhead tiers extended to mirror the workbook `tbl.oh` (Reference!K5:L13).
 export type OverheadType =
   | "buy_resell_3" | "normal_5" | "large_7" | "special_9"
   | "zoom_5" | "internet_5" | "cloud_5" | "complex_15";
 export const OVERHEAD_RATE: Record<OverheadType, number> = {
-  buy_resell_3: 0.03,
-  normal_5: 0.05,
-  large_7: 0.07,
-  special_9: 0.09,
-  zoom_5: 0.05,
-  internet_5: 0.05,
-  cloud_5: 0.05,
-  complex_15: 0.15,
+  buy_resell_3: 0.03, normal_5: 0.05, large_7: 0.07, special_9: 0.09,
+  zoom_5: 0.05, internet_5: 0.05, cloud_5: 0.05, complex_15: 0.15,
 };
 export const OVERHEAD_LABEL: Record<OverheadType, string> = {
-  buy_resell_3: "ซื้อมาขายไป (3%)",
-  normal_5: "โครงการปกติ (5%)",
-  large_7: "โครงการใหญ่ (7%)",
-  special_9: "โครงการพิเศษ (9%)",
-  zoom_5: "บริการ Zoom (5%)",
-  internet_5: "บริการ Internet (5%)",
-  cloud_5: "บริการ Cloud Service (5%)",
-  complex_15: "โครงการซับซ้อน (15%)",
+  buy_resell_3: "ซื้อมาขายไป (3%)", normal_5: "โครงการปกติ (5%)", large_7: "โครงการใหญ่ (7%)",
+  special_9: "โครงการพิเศษ (9%)", zoom_5: "บริการ Zoom (5%)", internet_5: "บริการ Internet (5%)",
+  cloud_5: "บริการ Cloud Service (5%)", complex_15: "โครงการซับซ้อน (15%)",
 };
 
 export const VAT_RATE = 0.07;
-export const DEFAULT_DISCOUNT_RATE = 0.06; // rate.discount (Summary!B94)
-export const DEFAULT_MARKETING_RATE = 0.01; // Reference!H default
-export const BOND_SIZE_PCT = 0.05; // bond amount = 5% of project value
-export const BOND_FEE_PCT = 0.01; // bank fee = 1% of bond amount per period
+export const DEFAULT_DISCOUNT_RATE = 0.06;
+export const DEFAULT_MARKETING_RATE = 0.01;
+export const BOND_SIZE_PCT = 0.05;
+export const BOND_FEE_PCT = 0.01;
 
 export type EstimateHeader = {
   contract_term_months: number;
@@ -98,21 +60,16 @@ export type EstimateHeader = {
   telecom_license_enabled?: boolean;
   overhead_type?: OverheadType;
   credit_term_days?: number;
-  // New optional calc inputs (UI/DB wired separately):
-  overhead_rate?: number;        // D4: authoritative rate from presale_db_overhead.percent_oh
-  marketing_rate?: number;       // D2: presales_service_types.rate_marketing for the service
-  impl_duration_months?: number; // D3: install/delivery duration (Summary AC9 imp.duration)
-  discount_rate_annual?: number; // D5: rate.discount
+  overhead_rate?: number;
+  marketing_rate?: number;
+  impl_duration_months?: number;
+  discount_rate_annual?: number;
 };
 
 export type OprKind = "amount" | "rate_of_capex" | "auto_revenue" | "auto_overhead" | "auto_interest" | "auto_bidbond" | "auto_perfbond";
 export type OprRow = {
-  code: string;
-  label_en: string;
-  label_th: string;
-  kind: OprKind;
-  rate?: number;
-  conditional?: "bid_bond" | "perf_bond" | "telecom_license";
+  code: string; label_en: string; label_th: string; kind: OprKind;
+  rate?: number; conditional?: "bid_bond" | "perf_bond" | "telecom_license";
 };
 
 export const OPR_ROWS: OprRow[] = [
@@ -122,30 +79,25 @@ export const OPR_ROWS: OprRow[] = [
   { code: "OPR-100004", label_en: "Sale and Presale Management & Acceptance", label_th: "Sale and Presale Management & Acceptance", kind: "amount" },
   { code: "OPR-100005", label_en: "Onsite Service (MA, CM/PM)", label_th: "ค่าบริการหลังการขาย Onsite Service (MA, CM/PM)", kind: "amount" },
   { code: "OPR-100006", label_en: "Spare parts (% of CAPEX)", label_th: "ค่าอุปกรณ์สำรอง (% ของงบลงทุน)", kind: "rate_of_capex" },
-  { code: "OPR-100007", label_en: "Interest 1%/month × (duration − credit)", label_th: "ค่าดอกเบี้ย 1%/เดือน × (ระยะติดตั้ง − Credit)", kind: "auto_interest" },
+  { code: "OPR-100007", label_en: "Interest 1%/month × (duration − credit)", label_th: "ค่าดอกเบี้ย", kind: "auto_interest" },
   { code: "OPR-100008", label_en: "Bid Bond fee (5% × 1% × periods)", label_th: "ค่าธรรมเนียม Bid Bond", kind: "auto_bidbond", conditional: "bid_bond" },
   { code: "OPR-100009", label_en: "Performance Bond fee (5% × 1% × contract)", label_th: "ค่าธรรมเนียม Performance Bond", kind: "auto_perfbond", conditional: "perf_bond" },
-  { code: "OPR-100010", label_en: "Marketing (% of revenue, per service)", label_th: "ค่าการตลาด (% ของรายได้ ตาม service)", kind: "auto_revenue" },
+  { code: "OPR-100010", label_en: "Marketing (% of revenue, per service)", label_th: "ค่าการตลาด", kind: "auto_revenue" },
   { code: "OPR-100011", label_en: "Telecom License Fee 2%", label_th: "ค่าธรรมเนียมใบอนุญาตโทรคมนาคม 2%", kind: "auto_revenue", rate: 0.02, conditional: "telecom_license" },
   { code: "OPR-100012", label_en: "Customer Entertainment / Gifts", label_th: "ค่าเลี้ยงรับรองลูกค้า/ของขวัญ", kind: "amount" },
-  { code: "OPR-100013", label_en: "Overhead Cost (3 / 5 / 7 / 9 / 15 %)", label_th: "Overhead Cost (3 / 5 / 7 / 9 / 15 %)", kind: "auto_overhead" },
+  { code: "OPR-100013", label_en: "Overhead Cost (3 / 5 / 7 / 9 / 15 %)", label_th: "Overhead Cost", kind: "auto_overhead" },
 ];
 
 export const OPEX_CATEGORIES = OPR_ROWS.map((r) => ({
-  code: r.code,
-  label_en: r.label_en,
-  label_th: r.label_th,
-  kind:
-    r.kind === "amount" ? "amount" :
-    r.kind === "rate_of_capex" ? "pct_of_otc" : "pct_of_revenue",
+  code: r.code, label_en: r.label_en, label_th: r.label_th,
+  kind: r.kind === "amount" ? "amount" : r.kind === "rate_of_capex" ? "pct_of_otc" : "pct_of_revenue",
 }));
 
 export function emptyLine(line_type: LineType, seq: number): EstimateLine {
   return {
-    line_type, seq, category: null, supplier: null, item_code: null,
-    item_description: null, unit: null, quantity: 0, unit_price_msrp: 0,
-    discount_pct: 0, cost_price: 0, sell_price: 0, currency: "THB",
-    fx_rate: 1, amount_thb: 0, remark: null, warranty_years: null,
+    line_type, seq, category: null, supplier: null, item_code: null, item_description: null,
+    unit: null, quantity: 0, unit_price_msrp: 0, discount_pct: 0, cost_price: 0, sell_price: 0,
+    currency: "THB", fx_rate: 1, amount_thb: 0, remark: null, warranty_years: null,
     lead_time_days: null, credit_term_days: null,
   };
 }
@@ -160,45 +112,21 @@ export function recalcLine(l: EstimateLine): EstimateLine {
   return { ...l, amount_thb: Number(amount.toFixed(2)) };
 }
 
-export function makeInstallPmLine(line_type: "install" | "pmcm", seq: number, t: typeof INSTALL_PM_TEMPLATE[number]): EstimateLine {
-  return recalcLine({
-    line_type, seq, category: null, supplier: t.pic, item_code: null,
-    item_description: t.item, unit: null, quantity: 0, unit_price_msrp: t.unit_price,
-    discount_pct: 0, cost_price: t.unit_price, sell_price: t.unit_price,
-    currency: "THB", fx_rate: 1, amount_thb: 0, remark: t.remark ?? null,
-  });
-}
-
-export type Totals = {
-  total_otc: number; total_mrc: number; total_tcv: number;
-  total_cogs: number; total_opex: number;
-  total_otc_cost: number; total_mrc_cost: number;
-  revenue_otc: number; revenue_mrc: number;
-  project_value_incl_vat: number;
-  gp_thb: number; gp_pct: number; np_thb: number; np_pct: number;
-  payback_months: number; npv_thb: number;
-  opr: Record<string, number>;
-};
-
 function overheadRate(header: EstimateHeader): number {
   if (typeof header.overhead_rate === "number") return header.overhead_rate;
   return OVERHEAD_RATE[header.overhead_type ?? "normal_5"] ?? 0.05;
 }
 
-/** Compute auto-driven OPR amounts based on header + lines + manual amounts. */
 export function computeOprAmounts(
-  header: EstimateHeader,
-  otcLines: EstimateLine[],
-  mrcLines: EstimateLine[],
-  manualAmounts: Record<string, number>,
-  overrides?: Partial<Record<string, number>>,
+  header: EstimateHeader, otcLines: EstimateLine[], mrcLines: EstimateLine[],
+  manualAmounts: Record<string, number>, overrides?: Partial<Record<string, number>>,
 ): Record<string, number> {
   const total_otc_cost = otcLines.reduce((a, l) => a + (l.cost_price || 0) * (l.quantity || 0) * (l.fx_rate || 1), 0);
   const total_otc = otcLines.reduce((a, l) => a + (l.amount_thb || 0), 0);
   const total_mrc = mrcLines.reduce((a, l) => a + (l.amount_thb || 0), 0);
   const term = Math.max(1, header.contract_term_months || 12);
-  const revenue = total_otc + total_mrc * term;            // rev.total (ex-VAT)
-  const revenueVat = revenue * (1 + VAT_RATE);             // N10 (incl VAT)
+  const revenue = total_otc + total_mrc * term;
+  const revenueVat = revenue * (1 + VAT_RATE);
   const oh_rate = overheadRate(header);
   const mkt_rate = typeof header.marketing_rate === "number" ? header.marketing_rate : DEFAULT_MARKETING_RATE;
   const credit_months = (header.credit_term_days ?? 0) / 30;
@@ -213,30 +141,13 @@ export function computeOprAmounts(
     if (r.conditional === "telecom_license" && !header.telecom_license_enabled) { out[r.code] = 0; continue; }
     if (overrides && overrides[r.code] != null) { out[r.code] = round2(overrides[r.code] as number); continue; }
     switch (r.kind) {
-      case "amount":
-        out[r.code] = manualAmounts[r.code] ?? 0;
-        break;
-      case "rate_of_capex": {
-        const rate = manualAmounts[r.code] ?? 0; // R52 spare %
-        out[r.code] = rate * total_otc_cost;
-        break;
-      }
-      case "auto_interest": // OPR-100007
-        out[r.code] = total_otc_cost * 0.01 * interest_months;
-        break;
-      case "auto_bidbond": // OPR-100008 — bank fee
-        out[r.code] = revenueVat * BOND_SIZE_PCT * BOND_FEE_PCT * bid_periods;
-        break;
-      case "auto_perfbond": // OPR-100009 — bank fee over contract
-        out[r.code] = revenueVat * BOND_SIZE_PCT * BOND_FEE_PCT * term;
-        break;
-      case "auto_revenue":
-        // OPR-100010 marketing uses per-service rate; others use their fixed rate (e.g. license 2%).
-        out[r.code] = (r.code === "OPR-100010" ? mkt_rate : (r.rate ?? 0)) * revenue;
-        break;
-      case "auto_overhead":
-        out[r.code] = oh_rate * revenue;
-        break;
+      case "amount": out[r.code] = manualAmounts[r.code] ?? 0; break;
+      case "rate_of_capex": { const rate = manualAmounts[r.code] ?? 0; out[r.code] = rate * total_otc_cost; break; }
+      case "auto_interest": out[r.code] = total_otc_cost * 0.01 * interest_months; break;
+      case "auto_bidbond": out[r.code] = revenueVat * BOND_SIZE_PCT * BOND_FEE_PCT * bid_periods; break;
+      case "auto_perfbond": out[r.code] = revenueVat * BOND_SIZE_PCT * BOND_FEE_PCT * term; break;
+      case "auto_revenue": out[r.code] = (r.code === "OPR-100010" ? mkt_rate : (r.rate ?? 0)) * revenue; break;
+      case "auto_overhead": out[r.code] = oh_rate * revenue; break;
     }
     out[r.code] = round2(out[r.code]);
   }
@@ -246,6 +157,87 @@ export function computeOprAmounts(
 export function sumInstallPm(lines: EstimateLine[], type: "install" | "pmcm"): number {
   return lines.filter((l) => l.line_type === type).reduce((a, l) => a + (l.amount_thb || 0), 0);
 }
+
+// ---- Tier-2: monthly discounted cash-flow (workbook sheet "4) CF") ----
+export type Cashflow = {
+  net_profit_npv: number;   // NPV(disc/12, cashflow-with-OH)  (Excel C14)
+  margin_npv: number;       // net_profit_npv / total_revenue   (Excel C13)
+  payback_months: number;   // fractional month cumulative(with-OH) >= 0 (Excel C12); Infinity if never
+  total_revenue: number;
+  monthly_cf_with_oh: number[];
+};
+
+/** Faithful monthly cash flow. opr = result of computeOprAmounts (with install/pmcm overrides). */
+export function computeCashflow(
+  header: EstimateHeader,
+  opr: Record<string, number>,
+  sums: { otcSale: number; mrcSalePerMonth: number; mrcCostPerMonth: number; investmentCost: number },
+): Cashflow {
+  const term = Math.max(1, header.contract_term_months || 12);
+  const mktRate = typeof header.marketing_rate === "number" ? header.marketing_rate : DEFAULT_MARKETING_RATE;
+  const nbtcRate = header.telecom_license_enabled ? 0.02 : 0;
+  const ohRate = overheadRate(header);
+  const annual = typeof header.discount_rate_annual === "number" ? header.discount_rate_annual : DEFAULT_DISCOUNT_RATE;
+  const monthlyDisc = annual / 12; // Excel NPV(rate.discount/12, ...)
+
+  // One-time CAPEX (month 1): investment cost + OPR 1,2,3,4,6,7,8,9
+  const capexMonth1 = sums.investmentCost
+    + (opr["OPR-100001"] || 0) + (opr["OPR-100002"] || 0) + (opr["OPR-100003"] || 0)
+    + (opr["OPR-100004"] || 0) + (opr["OPR-100006"] || 0) + (opr["OPR-100007"] || 0)
+    + (opr["OPR-100008"] || 0) + (opr["OPR-100009"] || 0);
+  const entertainment = opr["OPR-100012"] || 0;        // month 1
+  const onsitePerMonth = (opr["OPR-100005"] || 0) / term; // OPR5 spread evenly
+
+  const cfWithOh: number[] = [];
+  const cfNoOh: number[] = [];
+  let totalRevenue = 0;
+  for (let m = 1; m <= term; m++) {
+    const revenue = (m === 1 ? sums.otcSale : 0) + sums.mrcSalePerMonth;
+    const opex = revenue * mktRate + revenue * nbtcRate + (m === 1 ? entertainment : 0)
+      + sums.mrcCostPerMonth + onsitePerMonth;
+    const overhead = revenue * ohRate;
+    const capex = m === 1 ? capexMonth1 : 0;
+    totalRevenue += revenue;
+    cfNoOh.push(revenue - opex - capex);
+    cfWithOh.push(revenue - opex - overhead - capex);
+  }
+
+  let npv = 0;
+  for (let m = 1; m <= term; m++) npv += cfWithOh[m - 1] / Math.pow(1 + monthlyDisc, m);
+
+  // Payback: fractional month where cumulative cf-with-OH first >= 0
+  let cum = 0, prevCum = 0, payback = Infinity;
+  for (let m = 1; m <= term; m++) {
+    prevCum = cum;
+    cum += cfWithOh[m - 1];
+    if (cum >= 0) {
+      const flow = cfWithOh[m - 1];
+      payback = flow > 0 ? (m - 1) + (-prevCum) / flow : m - 1;
+      break;
+    }
+  }
+
+  return {
+    net_profit_npv: round2(npv),
+    margin_npv: totalRevenue > 0 ? round4(npv / totalRevenue) : 0,
+    payback_months: isFinite(payback) ? round2(Math.max(0, payback)) : Infinity,
+    total_revenue: round2(totalRevenue),
+    monthly_cf_with_oh: cfWithOh.map(round2),
+  };
+}
+
+export type Totals = {
+  total_otc: number; total_mrc: number; total_tcv: number;
+  total_cogs: number; total_opex: number;
+  total_otc_cost: number; total_mrc_cost: number;
+  revenue_otc: number; revenue_mrc: number;
+  project_value_incl_vat: number;
+  gp_thb: number; gp_pct: number;
+  np_thb: number; np_pct: number;          // np = discounted net profit (NPV); np_pct = NPV margin (routing)
+  payback_months: number; npv_thb: number;  // npv_thb === np_thb (Excel net profit IS the NPV)
+  opr: Record<string, number>;
+  cashflow: Cashflow;
+};
 
 export function computeTotals(header: EstimateHeader, lines: EstimateLine[]): Totals {
   const otc = lines.filter((l) => l.line_type === "otc");
@@ -280,20 +272,17 @@ export function computeTotals(header: EstimateHeader, lines: EstimateLine[]): To
   const overheadAmount = opr["OPR-100013"] || 0;
   const opexExOverhead = total_opex - overheadAmount;
 
+  // Undiscounted gross profit (P&L breakdown reference)
   const gp_thb = total_tcv - total_cogs - opexExOverhead;
   const gp_pct = total_tcv > 0 ? gp_thb / total_tcv : 0;
-  const np_thb = gp_thb - overheadAmount;
-  const np_pct = total_tcv > 0 ? np_thb / total_tcv : 0;
 
-  const upfront = total_otc - total_otc_cost;
-  const monthlyNet = total_mrc - total_mrc_cost;
-  const payback_months = monthlyNet > 0 ? Math.max(0, -upfront / monthlyNet) : 0;
-
-  // D5: configurable annual discount (default 6%). Tier-2 will replace with full monthly CF.
-  const annual = typeof header.discount_rate_annual === "number" ? header.discount_rate_annual : DEFAULT_DISCOUNT_RATE;
-  const rMonthly = Math.pow(1 + annual, 1 / 12) - 1;
-  let npv = upfront;
-  for (let m = 1; m <= term; m++) npv += monthlyNet / Math.pow(1 + rMonthly, m);
+  // Tier-2: discounted net profit / margin / payback (the routing figures)
+  const cashflow = computeCashflow(header, opr, {
+    otcSale: total_otc,
+    mrcSalePerMonth: total_mrc,
+    mrcCostPerMonth: total_mrc_cost,
+    investmentCost: total_otc_cost,
+  });
 
   return {
     total_otc: round2(total_otc), total_mrc: round2(total_mrc), total_tcv: round2(total_tcv),
@@ -302,9 +291,10 @@ export function computeTotals(header: EstimateHeader, lines: EstimateLine[]): To
     revenue_otc: round2(revenue_otc), revenue_mrc: round2(revenue_mrc),
     project_value_incl_vat: round2(project_value_incl_vat),
     gp_thb: round2(gp_thb), gp_pct: round4(gp_pct),
-    np_thb: round2(np_thb), np_pct: round4(np_pct),
-    payback_months: isFinite(payback_months) ? round2(payback_months) : 0,
-    npv_thb: round2(npv), opr,
+    np_thb: cashflow.net_profit_npv, np_pct: cashflow.margin_npv,
+    payback_months: isFinite(cashflow.payback_months) ? cashflow.payback_months : 0,
+    npv_thb: cashflow.net_profit_npv,
+    opr, cashflow,
   };
 }
 
